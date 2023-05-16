@@ -79,7 +79,7 @@ void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
         int prefix = 0x0FFF & (unsigned) dst;
         unsigned char *sector = dst - prefix;
         int len = size;
-        if (size > 0x1000)
+        if (len + prefix > 0x1000)
         {
             len = 0x1000;
             len -= prefix;      
