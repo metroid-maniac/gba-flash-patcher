@@ -65,10 +65,16 @@ static void flashProgramByte(volatile unsigned char *tgt, unsigned char data)
     SRAM_BASE[FLASH_MAGIC_0] = 0xF0;
 }
 
-void my_memcpy(unsigned char *dst, unsigned char *src, unsigned size)
+int my_memcpy(unsigned char *dst, unsigned char *src, unsigned size)
 {
+    int hits = 0;
     for (int i = 0; i < size; ++i)
-        dst[i] = src[i];
+        if (dst[i] != src[i])
+        {
+            ++hits;
+            dst[i] = src[i];
+        }
+    return hits;
 }
 
 void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
@@ -86,10 +92,12 @@ void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
         }
         
         my_memcpy(sector_buf, sector, 0x1000);
-        my_memcpy(sector_buf + prefix, src, len);
-        flashEraseSector(sector);
-        for (int i = 0; i < 0x1000; ++i)
-            flashProgramByte(&sector[i], sector_buf[i]);        
+        if (my_memcpy(sector_buf + prefix, src, len))
+        {
+            flashEraseSector(sector);
+            for (int i = 0; i < 0x1000; ++i)
+                flashProgramByte(&sector[i], sector_buf[i]);        
+        }
         
         src += len;
         dst += len;
