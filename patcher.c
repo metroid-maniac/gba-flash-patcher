@@ -13,7 +13,11 @@ uint8_t rom[0x02000000];
 
 enum payload_offsets {
     WRITE_SRAM_PATCHED,
-    WRITE_EEPROM_PATCHED
+    WRITE_EEPROM_PATCHED,
+    READ_SRAM_PATCHED,
+    READ_EEPROM_PATCHED,
+    VERIFY_SRAM_PATCHED,
+    VERIFY_EEPROM_PATCHED
 };
 
 // ldr r3, [pc, # 0]; bx r3
@@ -23,6 +27,11 @@ static unsigned char arm_branch_thunk[] = { 0x00, 0x30, 0x9f, 0xe5, 0x13, 0xff, 
 static unsigned char write_sram_signature[] = { 0x30, 0xB5, 0x05, 0x1C, 0x0C, 0x1C, 0x13, 0x1C, 0x0B, 0x4A, 0x10, 0x88, 0x0B, 0x49, 0x08, 0x40};
 static unsigned char write_sram2_signature[] = { 0x80, 0xb5, 0x83, 0xb0, 0x6f, 0x46, 0x38, 0x60, 0x79, 0x60, 0xba, 0x60, 0x09, 0x48, 0x09, 0x49 };
 static unsigned char write_sram_ram_signature[] = { 0x04, 0xC0, 0x90, 0xE4, 0x01, 0xC0, 0xC1, 0xE4, 0x2C, 0xC4, 0xA0, 0xE1, 0x01, 0xC0, 0xC1, 0xE4 };
+
+static unsigned char read_sram_signature[] = { 0x70, 0xB5, 0xA0, 0xB0, 0x04, 0x1C, 0x0D, 0x1C, 0x16, 0x1C, 0x08, 0x4A, 0x10, 0x88, 0x08, 0x49};
+
+static unsigned char verify_sram_signature[] = { 0x70, 0xB5, 0xB0, 0xB0, 0x04, 0x1C, 0x0D, 0x1C, 0x16, 0x1C, 0x08, 0x4A, 0x10, 0x88, 0x08, 0x49 };
+
 static unsigned char write_eeprom_signature[] = { 0x70, 0xB5, 0x00, 0x04, 0x0A, 0x1C, 0x40, 0x0B, 0xE0, 0x21, 0x09, 0x05, 0x41, 0x18, 0x07, 0x31, 0x00, 0x23, 0x10, 0x78};
 
 
@@ -156,6 +165,22 @@ int main(int argc, char **argv)
             printf("WriteSramFast identified at offset %lx, patching\n", write_location - rom);
             memcpy(write_location, arm_branch_thunk, sizeof arm_branch_thunk);
             2[(uint32_t*) write_location] = 0x08000000 + payload_base + WRITE_SRAM_PATCHED[(uint32_t*) payload_bin];
+		}
+        if (!memcmp(write_location, read_sram_signature, sizeof read_sram_signature))
+		{
+            found_write_location = 1;
+            printf("ReadSram identified at offset %lx, patching\n", write_location - rom);
+            memcpy(write_location, thumb_branch_thunk, sizeof thumb_branch_thunk);
+            1[(uint32_t*) write_location] = 0x08000000 + payload_base + READ_SRAM_PATCHED[(uint32_t*) payload_bin];
+
+		}
+        if (!memcmp(write_location, verify_sram_signature, sizeof verify_sram_signature))
+		{
+            found_write_location = 1;
+            printf("VerifySram identified at offset %lx, patching\n", write_location - rom);
+            memcpy(write_location, thumb_branch_thunk, sizeof thumb_branch_thunk);
+            1[(uint32_t*) write_location] = 0x08000000 + payload_base + VERIFY_SRAM_PATCHED[(uint32_t*) payload_bin];
+
 		}
 		if (!memcmp(write_location, write_eeprom_signature, sizeof write_eeprom_signature))
 		{

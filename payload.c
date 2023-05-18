@@ -1,6 +1,10 @@
 
 asm(R"(.word write_sram_patched + 1
 .word write_eeprom_patched + 1
+.word read_sram_patched + 1
+.word 0
+.word verify_sram_patched + 1
+.word 0
 
 .thumb
 write_eeprom_patched:
@@ -68,12 +72,15 @@ static void flashProgramByte(volatile unsigned char *tgt, unsigned char data)
 int my_memcpy(unsigned char *dst, unsigned char *src, unsigned size)
 {
     int hits = 0;
-    for (int i = 0; i < size; ++i)
-        if (dst[i] != src[i])
-        {
+    while (size)
+    {
+        if (*dst != *src)
             ++hits;
-            dst[i] = src[i];
-        }
+        *dst = *src;
+        ++dst;
+        ++src;
+        --size;
+    }
     return hits;
 }
 
@@ -103,4 +110,23 @@ void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
         dst += len;
         size -= len;
     }
+}
+
+void read_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
+{
+    my_memcpy(dst, src, size);
+}
+
+unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsigned size)
+{
+    while (size)
+    {
+        if (*src != *tgt)
+            return tgt;
+        
+        ++src;
+        ++tgt;
+        --size;
+    }
+    return 0;
 }
