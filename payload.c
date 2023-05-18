@@ -69,7 +69,9 @@ static void flashProgramByte(volatile unsigned char *tgt, unsigned char data)
     SRAM_BASE[FLASH_MAGIC_0] = 0xF0;
 }
 
-int my_memcpy(unsigned char *dst, unsigned char *src, unsigned size)
+#define LOADFACTOR_LOG2 1
+
+int my_memcpy(unsigned char *dst, int dstride, unsigned char *src, int sstride, unsigned size)
 {
     int hits = 0;
     while (size)
@@ -77,33 +79,44 @@ int my_memcpy(unsigned char *dst, unsigned char *src, unsigned size)
         if (*dst != *src)
             ++hits;
         *dst = *src;
-        ++dst;
-        ++src;
+        dst += dstride;
+        src += sstride;
         --size;
     }
     return hits;
 }
 
+unsigned char *translate(unsigned char *addr, int loadfactor_log2)
+{
+    unsigned res = (unsigned) addr;
+    res &= 0x0000FFFF;
+    res <<= loadfactor_log2;
+    res |= 0x0E000000;
+    return (unsigned char *) res;
+}
+
 void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
 {
-    unsigned char sector_buf[0x1000];
+    int loadfactor_log2 = LOADFACTOR_LOG2;
+    unsigned sector_usage = 0x1000 >> loadfactor_log2;
+    unsigned char sector_buf[sector_usage];
     while (size)
     {
-        int prefix = 0x0FFF & (unsigned) dst;
-        unsigned char *sector = dst - prefix;
+        int prefix = (sector_usage - 1) & (unsigned) dst;
+        unsigned char *sector = translate(dst - prefix, loadfactor_log2);
         int len = size;
-        if (len + prefix > 0x1000)
+        if (len + prefix > sector_usage)
         {
-            len = 0x1000;
+            len = sector_usage;
             len -= prefix;      
         }
         
-        my_memcpy(sector_buf, sector, 0x1000);
-        if (my_memcpy(sector_buf + prefix, src, len))
+        my_memcpy(sector_buf, 1, sector, 1 << loadfactor_log2, sector_usage);
+        if (my_memcpy(sector_buf + prefix, 1, src, 1, len))
         {
             flashEraseSector(sector);
-            for (int i = 0; i < 0x1000; ++i)
-                flashProgramByte(&sector[i], sector_buf[i]);        
+            for (int i = 0; i < sector_usage; ++i)
+                flashProgramByte(&sector[i << loadfactor_log2], sector_buf[i]);        
         }
         
         src += len;
@@ -114,14 +127,16 @@ void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
 
 void read_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
 {
-    my_memcpy(dst, src, size);
+    int loadfactor_log2 = LOADFACTOR_LOG2;
+    my_memcpy(dst, 1, translate(src, loadfactor_log2), 1 << loadfactor_log2, size);
 }
 
 unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsigned size)
 {
+    int loadfactor_log2 = LOADFACTOR_LOG2;
     while (size)
     {
-        if (*src != *tgt)
+        if (*src != *translate(tgt, loadfactor_log2))
             return tgt;
         
         ++src;
