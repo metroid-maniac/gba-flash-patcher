@@ -2,39 +2,9 @@
 asm(R"(.word write_sram_patched + 1
 .word write_eeprom_patched + 1
 .word read_sram_patched + 1
-.word 0
+.word read_eeprom_patched + 1
 .word verify_sram_patched + 1
-.word 0
-
-.thumb
-write_eeprom_patched:
-    push {r4, lr}
-	mov r2, r1
-	add r2, # 8
-	mov r3, sp
-write_eeprom_patched_byte_swap_loop:
-    ldrb r4, [r1]
-	add r1, # 1
-	sub r3, # 1
-	strb r4, [r3]
-	cmp r1, r2
-	bne write_eeprom_patched_byte_swap_loop
-	
-	mov r1, # 0x0e
-	lsl r1, # 24
-	lsl r0, # 3
-	add r1, r0
-	mov r2, # 8
-	mov r0, r3
-	mov sp, r3
-	bl write_sram_patched
-	
-    mov r0, # 0
-	add sp, # 8
-	pop {r4, pc}
-    
-    
-)");
+.word verify_eeprom_patched + 1)");
 
 #define SRAM_BASE ((volatile unsigned char*) (0x0E000000))
 #define FLASH_MAGIC_0 (0x5555)
@@ -144,4 +114,27 @@ unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsig
         --size;
     }
     return 0;
+}
+
+// Just shims for now...
+static unsigned char *eep2sram(unsigned addr)
+{
+    addr <<= 3;
+    addr |= 0x0e000000;
+    return (unsigned char*) addr;
+}
+
+unsigned write_eeprom_patched(unsigned addr, unsigned char *src)
+{
+    write_sram_patched(src, eep2sram(addr), 8);
+    return 0;
+}
+unsigned read_eeprom_patched(unsigned addr, unsigned char *dst)
+{
+    read_sram_patched(eep2sram(addr), dst, 8);
+    return 0;
+}
+unsigned verify_eeprom_patched(unsigned addr, unsigned char *src)
+{
+    return !!verify_sram_patched(src, eep2sram(addr), 8);
 }
