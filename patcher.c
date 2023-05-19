@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     
     // Find a location to insert the payload
 	int payload_base;
-    for (payload_base = romsize - payload_bin_len; payload_base >= 0; payload_base -= 2)
+    for (payload_base = romsize - payload_bin_len; payload_base >= 0; payload_base -= 4)
     {
         int is_all_zeroes = 1;
         int is_all_ones = 1;
