@@ -17,7 +17,8 @@ enum payload_offsets {
     READ_SRAM_PATCHED,
     READ_EEPROM_PATCHED,
     VERIFY_SRAM_PATCHED,
-    VERIFY_EEPROM_PATCHED
+    VERIFY_EEPROM_PATCHED,
+    EEPROM_META
 };
 
 // ldr r3, [pc, # 0]; bx r3
@@ -37,6 +38,8 @@ static unsigned char write_eeprom_signature[] = { 0x70, 0xB5, 0x00, 0x04, 0x0A, 
 static unsigned char read_eeprom_signature[] = { 0x70, 0xB5, 0x00, 0x04, 0x0A, 0x1C, 0x40, 0x0B, 0xE0, 0x21, 0x09, 0x05, 0x41, 0x18, 0x07, 0x31 };
 
 static unsigned char verify_eeprom_signature[] = { 0x30, 0xB5, 0x82, 0xB0, 0x0C, 0x1C, 0x00, 0x04, 0x01, 0x0C, 0x00, 0x25, 0x03, 0x48, 0x00, 0x68 };
+
+static unsigned char identify_eeprom_signature[] = { 0x00, 0x04, 0x00, 0x0C, 0x00, 0x22, 0x04, 0x28, 0x08, 0xD1, 0x02, 0x49, 0x02, 0x48, 0x08, 0x60 };
 
 
 static uint8_t *memfind(uint8_t *haystack, size_t haystack_size, uint8_t *needle, size_t needle_size, int stride)
@@ -206,6 +209,12 @@ int main(int argc, char **argv)
             memcpy(write_location, thumb_branch_thunk, sizeof thumb_branch_thunk);
             1[(uint32_t*) write_location] = 0x08000000 + payload_base + VERIFY_EEPROM_PATCHED[(uint32_t*) payload_bin];
 		}
+        if (!memcmp(write_location, identify_eeprom_signature, sizeof identify_eeprom_signature))
+        {
+            found_write_location = 1;
+            EEPROM_META[(uint32_t*) &rom[payload_base]] = 5[(uint32_t*) write_location];
+            printf("SRAM-patched IdentifyEeprom identified at offset %lx, RAM address of eeprom info is %x\n", write_location - rom, 5[(uint32_t*) write_location]);
+        }
 	}
     if (!found_write_location)
     {

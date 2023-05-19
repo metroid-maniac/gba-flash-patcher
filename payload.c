@@ -1,10 +1,31 @@
 
-asm(R"(.word write_sram_patched + 1
+asm(R"(.section .text
+
+.word write_sram_patched + 1
 .word write_eeprom_patched + 1
 .word read_sram_patched + 1
 .word read_eeprom_patched + 1
 .word verify_sram_patched + 1
-.word verify_eeprom_patched + 1)");
+.word verify_eeprom_patched + 1
+eeprom_meta:
+.word 0)");
+
+struct eeprom_meta
+{
+    unsigned size;
+    unsigned short addrs;
+    unsigned short wait;
+    unsigned char addr_bits;
+};
+
+struct eeprom_meta *get_eeprom_meta()
+{
+    struct eeprom_meta ***eeprom_meta_ptrptr;
+    asm (R"(mov %[eeprom_meta_ptrptr], pc
+    sub %[eeprom_meta_ptrptr], # . + 2 - eeprom_meta)" 
+     : [eeprom_meta_ptrptr] "=r" (eeprom_meta_ptrptr));
+    return **eeprom_meta_ptrptr;
+}
 
 #define SRAM_BASE ((volatile unsigned char*) (0x0E000000))
 #define FLASH_MAGIC_0 (0x5555)
@@ -121,28 +142,30 @@ unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsig
     return error_idx < 0 ? 0 : (unsigned char *) (0x0E000000 | error_idx);
 }
 
-static unsigned fudge_eeprom_addr(unsigned addr)
-{
-    unsigned low_part = addr & 0x3F;
-    unsigned high_part = addr >> 6;
-    unsigned rearranged = high_part | low_part << 4;
-    return rearranged << 3;
-}
-
 unsigned write_eeprom_patched(unsigned short addr, unsigned char *src)
 {
-    int loadfactor_log2 = 3;
-    write_core_patched(src, fudge_eeprom_addr(addr), 8, loadfactor_log2);
+    struct eeprom_meta *eeprom_meta = get_eeprom_meta();
+    if (!eeprom_meta)
+        return 1;
+    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    write_core_patched(src, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
 unsigned read_eeprom_patched(unsigned short addr, unsigned char *dst)
 {
-    int loadfactor_log2 = 3;
-    read_core_patched(dst, fudge_eeprom_addr(addr), 8, loadfactor_log2);
+    struct eeprom_meta *eeprom_meta = get_eeprom_meta();
+    if (!eeprom_meta)
+        return 1;
+    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    read_core_patched(dst, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
 unsigned verify_eeprom_patched(unsigned short addr, unsigned char *src)
 {
-    int loadfactor_log2 = 3;
-    return verify_core_patched(src, fudge_eeprom_addr(addr), 8, loadfactor_log2) >= 0;
+    
+    struct eeprom_meta *eeprom_meta = get_eeprom_meta();
+    if (!eeprom_meta)
+        return 1;
+    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    return verify_core_patched(src, addr << 3, 1 << 3, loadfactor_log2) >= 0;
 }
