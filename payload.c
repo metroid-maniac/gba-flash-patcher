@@ -39,8 +39,6 @@ static void flashProgramByte(volatile unsigned char *tgt, unsigned char data)
     SRAM_BASE[FLASH_MAGIC_0] = 0xF0;
 }
 
-#define LOADFACTOR_LOG2 1
-
 int my_memcpy(unsigned char *dst, int dstride, unsigned char *src, int sstride, unsigned size)
 {
     int hits = 0;
@@ -56,24 +54,19 @@ int my_memcpy(unsigned char *dst, int dstride, unsigned char *src, int sstride, 
     return hits;
 }
 
-unsigned char *translate(unsigned char *addr, int loadfactor_log2)
+unsigned char *translate(unsigned idx, int loadfactor_log2)
 {
-    unsigned res = (unsigned) addr;
-    res &= 0x0000FFFF;
-    res <<= loadfactor_log2;
-    res |= 0x0E000000;
-    return (unsigned char *) res;
+    return (unsigned char *) (0x0E000000 | idx << loadfactor_log2);
 }
 
-void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
+void write_core_patched(unsigned char *src, unsigned idx, unsigned size, int loadfactor_log2)
 {
-    int loadfactor_log2 = LOADFACTOR_LOG2;
     unsigned sector_usage = 0x1000 >> loadfactor_log2;
     unsigned char sector_buf[sector_usage];
     while (size)
     {
-        int prefix = (sector_usage - 1) & (unsigned) dst;
-        unsigned char *sector = translate(dst - prefix, loadfactor_log2);
+        int prefix = (sector_usage - 1) & idx;
+        unsigned char *sector = translate(idx - prefix, loadfactor_log2);
         int len = size;
         if (len + prefix > sector_usage)
         {
@@ -90,51 +83,58 @@ void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
         }
         
         src += len;
-        dst += len;
+        idx += len;
         size -= len;
     }
 }
 
-void read_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
+void read_core_patched(unsigned char *dst, unsigned idx, unsigned size, int loadfactor_log2)
 {
-    int loadfactor_log2 = LOADFACTOR_LOG2;
-    my_memcpy(dst, 1, translate(src, loadfactor_log2), 1 << loadfactor_log2, size);
+    my_memcpy(dst, 1, translate(idx, loadfactor_log2), 1 << loadfactor_log2, size);
 }
 
-unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsigned size)
+int verify_core_patched(unsigned char *src, unsigned idx, unsigned size, int loadfactor_log2)
 {
-    int loadfactor_log2 = LOADFACTOR_LOG2;
     while (size)
     {
-        if (*src != *translate(tgt, loadfactor_log2))
-            return tgt;
+        if (*src != *translate(idx, loadfactor_log2))
+            return idx;
         
         ++src;
-        ++tgt;
+        ++idx;
         --size;
     }
-    return 0;
+    return -1;
 }
 
-// Just shims for now...
-static unsigned char *eep2sram(unsigned addr)
+void write_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
 {
-    addr <<= 3;
-    addr |= 0x0e000000;
-    return (unsigned char*) addr;
+    write_core_patched(src, 0x00007FFF & (unsigned) dst, size, 1);
+}
+void read_sram_patched(unsigned char *src, unsigned char *dst, unsigned size)
+{
+    read_core_patched(dst, 0x00007FFF & (unsigned) src, size, 1);
+}
+unsigned char *verify_sram_patched(unsigned char *src, unsigned char *tgt, unsigned size)
+{
+    int error_idx = verify_core_patched(src, 0x00007FFF & (unsigned) tgt, size, 1);
+    return error_idx < 0 ? 0 : (unsigned char *) (0x0E000000 | error_idx);
 }
 
-unsigned write_eeprom_patched(unsigned addr, unsigned char *src)
+unsigned write_eeprom_patched(unsigned short addr, unsigned char *src)
 {
-    write_sram_patched(src, eep2sram(addr), 8);
+    int loadfactor_log2 = 3;
+    write_core_patched(src, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
-unsigned read_eeprom_patched(unsigned addr, unsigned char *dst)
+unsigned read_eeprom_patched(unsigned short addr, unsigned char *dst)
 {
-    read_sram_patched(eep2sram(addr), dst, 8);
+    int loadfactor_log2 = 3;
+    read_core_patched(dst, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
-unsigned verify_eeprom_patched(unsigned addr, unsigned char *src)
+unsigned verify_eeprom_patched(unsigned short addr, unsigned char *src)
 {
-    return !!verify_sram_patched(src, eep2sram(addr), 8);
+    int loadfactor_log2 = 3;
+    return verify_core_patched(src, addr << 3, 1 << 3, loadfactor_log2) >= 0;
 }
