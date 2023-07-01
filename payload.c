@@ -147,7 +147,7 @@ unsigned write_eeprom_patched(unsigned short addr, unsigned char *src)
     struct eeprom_meta *eeprom_meta = get_eeprom_meta();
     if (!eeprom_meta)
         return 1;
-    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    int loadfactor_log2 = eeprom_meta->addrs == 0x40 ? 7 : 3;
     write_core_patched(src, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
@@ -156,7 +156,7 @@ unsigned read_eeprom_patched(unsigned short addr, unsigned char *dst)
     struct eeprom_meta *eeprom_meta = get_eeprom_meta();
     if (!eeprom_meta)
         return 1;
-    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    int loadfactor_log2 = eeprom_meta->addrs == 0x40 ? 7 : 3;
     read_core_patched(dst, addr << 3, 1 << 3, loadfactor_log2);
     return 0;
 }
@@ -166,6 +166,6 @@ unsigned verify_eeprom_patched(unsigned short addr, unsigned char *src)
     struct eeprom_meta *eeprom_meta = get_eeprom_meta();
     if (!eeprom_meta)
         return 1;
-    int loadfactor_log2 = eeprom_meta->addrs = 0x40 ? 7 : 3;
+    int loadfactor_log2 = eeprom_meta->addrs == 0x40 ? 7 : 3;
     return verify_core_patched(src, addr << 3, 1 << 3, loadfactor_log2) >= 0;
 }
